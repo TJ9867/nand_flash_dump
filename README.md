@@ -29,7 +29,7 @@ make
 ```
 
 ## Use dump\_flash.py
-The project includes a sample script to dump a chip from a serial endpoint to a file on disk. Warning: the current implementation is quite slow (~7 hours per dump).
+The project includes a sample script to dump a chip from a serial endpoint to a file on disk. Warning: the current implementation is quite slow (~7 hours per 512M, very bad but this is simplified implementation).
 ```bash
 usage: dump_flash.py [-h] [-s START_PAGE] [-n NUM_PAGES] [-p PAGE_SIZE] [-x OOB_SIZE] [-f FILENAME] [-d DEVNAME] [-b BAUDRATE]
 ```
