@@ -8,15 +8,16 @@ This repo is my current best attempt at a Raspberry Pi Pico NAND Flash. It doesn
 ## Default Pinout
 Everything can be configured (the logic for reading the I/O pins relies on sequential pin numbering, so make sure IO0-7 are continguous)
 
-I/O pins 0-7 = GP0-7
-CLE = GP22 
-ALE = GP21
-
-CE = GP20
-RE = GP19
-WE = GP18
-WP = GP17
-RY = GP16
+| Pin No. | Pin Name |
+|   -     |     -    |
+| GP0-7   | I/O 0-7  |
+| GP22    |   CLE    |
+| GP21    |   ALE    |
+| GP20    |   CE     |
+| GP19    |   RE     |
+| GP18    |   WE     |
+| GP17    |   WP     |
+| GP16    |   RY     |
 
 ## Compile
 ```bash
@@ -28,7 +29,8 @@ make
 ## Use dump\_flash.py
 The project includes a sample script to dump a chip from a serial endpoint to a file on disk. Warning: the current implementation is quite slow (~7 hours per dump).
 ```bash
-python3 dump_flash.py 
+usage: dump_flash.py [-h] [-s START_PAGE] [-n NUM_PAGES] [-p PAGE_SIZE] [-x OOB_SIZE] [-f FILENAME] [-d DEVNAME] [-b BAUDRATE]
+```
 
 ## Connect to Dumper Manually
 1. Plugin the Pico / Flash the Firmware (hold button while plugging in, copy the `.uf2` produced by build onto the PICO drive that appears)
