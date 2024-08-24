@@ -1,6 +1,8 @@
 # Pico NAND Flash Dumper
 
 This repo is my current best attempt at a Raspberry Pi Pico NAND Flash. It doesn't follow any formal specs perfectly (e.g. ONFI), which is probably why it doesn't quite work.
+## State of this Repo
+Currently, this repo is not completely functional. There is a problem that occurs while dumping that I have yet to fix, which results in partially corrupted page reads.
 
 ## Prequisites
 - Pico-compatible board with enough pins (15 with at least 8 sequential pins)
@@ -31,6 +33,9 @@ The project includes a sample script to dump a chip from a serial endpoint to a 
 ```bash
 usage: dump_flash.py [-h] [-s START_PAGE] [-n NUM_PAGES] [-p PAGE_SIZE] [-x OOB_SIZE] [-f FILENAME] [-d DEVNAME] [-b BAUDRATE]
 ```
+
+## TODO: `pio` version
+There's a PIO version I'm attempting to build, however that's going to be used once a working version of the repo.
 
 ## Connect to Dumper Manually
 1. Plugin the Pico / Flash the Firmware (hold button while plugging in, copy the `.uf2` produced by build onto the PICO drive that appears)
