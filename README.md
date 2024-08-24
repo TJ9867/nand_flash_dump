@@ -25,7 +25,12 @@ mkdir build && cd build && cmake ..
 make
 ```
 
-## Connect to Dumper
+## Use dump\_flash.py
+The project includes a sample script to dump a chip from a serial endpoint to a file on disk. Warning: the current implementation is quite slow (~7 hours per dump).
+```bash
+python3 dump_flash.py 
+
+## Connect to Dumper Manually
 1. Plugin the Pico / Flash the Firmware (hold button while plugging in, copy the `.uf2` produced by build onto the PICO drive that appears)
 2. Open a serial terminal program like screen (Linux): `screen /dev/ttyACM0 115200` or PuTTY (windows)
 3. Typing commands let you interact with the dumper (eventually the idea is that it will also allow for writing, too)
