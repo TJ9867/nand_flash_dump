@@ -80,7 +80,7 @@ typedef struct {
 } nand_pins_t;
 
 typedef struct {
-    uint8_t maker;
+    uint8_t maker; /* 0x98 Kioxia/Toshiba */
     uint8_t device;
     uint8_t chip_n_type;
     uint8_t pgsz_bksz_iow;
@@ -93,6 +93,7 @@ typedef enum cmd_enum {
     CMD_RESET_PAGE_NO = 2,
     CMD_SET_PAGE_NO = 3,
     CMD_GET_DRIVE_STRENGTH = 4,
+    CMD_GET_PAGE_SIZE = 5,
     CMD_NONE
 } cmd_enum_t;
 
@@ -106,7 +107,7 @@ typedef struct {
     void* alloc;
 } result_t;
 
-void* malloc(size_t n); // silence warnings
+void* malloc(size_t n); // silence IDE warnings
 void* memset(void* data, int val, unsigned int n);
 void free(void*);
 int printf(const char*, ...);
@@ -332,6 +333,80 @@ void read_id(nand_pins_t* pins, id_data_t* id_bytes)
     read_bytes(pins, (unsigned char*)id_bytes, sizeof(id_data_t));
 }
 
+typedef enum maker_enum {
+    TOSHIBA_KIOXIA = 0x98,
+} maker_code;
+
+void explain_id(id_data_t* id_bytes)
+{
+    printf("Maker: ");
+    switch (id_bytes->maker) {
+    case TOSHIBA_KIOXIA:
+        printf("Toshiba/Kioxia");
+        break;
+    default:
+        printf("Unknown (%x)", id_bytes->maker);
+    }
+    printf("\n");
+
+    printf("Device Code: %x\n", id_bytes->device);
+    printf("Internal Chip Number: %d\n", 1 << (id_bytes->chip_n_type & 0x03));
+    printf("Number of Cell Levels: %d\n", 1 << (((id_bytes->chip_n_type & 0x0B) >> 2) + 1));
+
+    printf("Page Size (without redundant area): %d KB\n", 1 << (id_bytes->pgsz_bksz_iow & 0x03));
+    printf("Block Size: %d KB\n", (1 << ((id_bytes->pgsz_bksz_iow & 0x30) >> 4)) * 64);
+    printf("I/O Width: x%d\n", (1 << ((id_bytes->pgsz_bksz_iow & 0x40) >> 6)) * 8);
+
+    printf("Number of Districts: %d\n", (1 << ((id_bytes->pgsz_bksz_iow & 0x0B) >> 6) + 1));
+}
+
+typedef struct _pg_sz_struct {
+    uint16_t page_size_bytes;
+    uint16_t oob_size_bytes;
+} page_sz_struct;
+
+bool get_page_size(id_data_t* id_bytes, page_sz_struct* pg_sz)
+{
+
+    uint32_t pg_size_kb = (1 << (id_bytes->pgsz_bksz_iow & 0x03));
+
+    if (id_bytes->maker == TOSHIBA_KIOXIA) {
+        switch (pg_size_kb) {
+        case 4:
+            pg_sz->page_size_bytes = 4096;
+            pg_sz->oob_size_bytes = 256;
+            break;
+        case 2:
+            pg_sz->page_size_bytes = 2048;
+            pg_sz->oob_size_bytes = 128; // TODO: is this just the formula page_size / 16?
+            break;
+        default:
+            // printf("bad pg_size_kb = %d\n", pg_size_kb);
+            return false;
+        }
+
+        return true;
+    }
+    // printf("unknown maker = %x\n", id_bytes->maker);
+    return false;
+}
+
+bool check_supported_io_width(id_data_t* id_bytes)
+{
+    uint32_t io_width = (1 << ((id_bytes->pgsz_bksz_iow & 0x40) >> 6)) * 8;
+
+    return io_width == 8; // currently this dumper only supports x8 chips
+}
+
+bool read_onfi_id(nand_pins_t* pins)
+{
+    char onfi_bytes[] = { 'O', 'N', 'F', 'I' };
+    char onfi_resp[6] = { 0 };
+    write_cmd(pins, 0x90);
+    write_addr_1(pins, 0x20);
+    read_bytes(pins, (unsigned char*)onfi_resp, sizeof(onfi_bytes));
+}
+
 void read_page(nand_pins_t* pins, uint32_t page_num, uint8_t* page_buff, uint32_t page_size)
 {
     reset_nand(pins);
@@ -354,16 +429,15 @@ queue_t cmd_queue = { 0 };
 queue_t results_queue = { 0 };
 nand_pins_t pins_glob = { 0 };
 uint8_t shared_buffer[16384] = { 0 };
+page_sz_struct pg_sz_glob = { 0 };
 
 void core1_main()
 {
 
-    set_gpios(&pins_glob);
-    init_gpios(&pins_glob, GPIO_DRIVE_STRENGTH_2MA);
-    reset_nand(&pins_glob);
     cmd_t cmd_arg = { 0, 5 };
     result_t result = { 0 };
     int page_num = 0;
+
     while (1) {
 
         queue_remove_blocking(&cmd_queue, &cmd_arg);
@@ -375,7 +449,7 @@ void core1_main()
             break;
 
         case CMD_READ_PAGE:
-            result.sz = 4096 + 256; // TODO adjust this for other page sizes
+            result.sz = pg_sz_glob.page_size_bytes + pg_sz_glob.oob_size_bytes; // TODO adjust this for other page sizes
             memset(shared_buffer, 0, sizeof(shared_buffer));
             read_page(&pins_glob, page_num, shared_buffer, result.sz);
             page_num += 1;
@@ -411,6 +485,30 @@ int main()
     // Command Queue to Core 1 (secondary core)
     queue_init(&cmd_queue, sizeof(cmd_t), 20);
 
+    // Get the chip into a good state
+    set_gpios(&pins_glob);
+    init_gpios(&pins_glob, GPIO_DRIVE_STRENGTH_2MA);
+    reset_nand(&pins_glob);
+
+    // read some of the config of the chip
+    id_data_t id_data = { 0 };
+    read_id(&pins_glob, &id_data);
+
+    if (!check_supported_io_width(&id_data)) {
+        printf("Unable to get page size from NAND flash ID bytes!\n");
+        while (true) {
+            tight_loop_contents();
+        }
+    }
+
+    if (!get_page_size(&id_data, &pg_sz_glob)) {
+        printf("Unable to get page size from NAND flash ID bytes!\n");
+        while (true) {
+            tight_loop_contents();
+        }
+    }
+    sleep_ms(500);
+
     multicore_launch_core1(core1_main);
 
     stdio_init_all();
@@ -418,7 +516,7 @@ int main()
     bool val = true;
     uint32_t curr_page = 0;
 
-    sleep_ms(500);
+    ;
 
     while (1) {
         val = (time_us_32() >> 17) & 0x1; // blink about every .262 secs
@@ -438,7 +536,7 @@ int main()
                 queue_add_blocking(&cmd_queue, &cmd_arg);
                 queue_remove_blocking(&results_queue, &res);
 
-                if (res.sz <= 0 || res.sz > 6) {
+                if (res.sz <= 0 || res.sz > sizeof(id_data_t)) {
                     printf("Error return: %d %p\n", res.sz, shared_buffer);
                     break;
                 }
@@ -447,6 +545,8 @@ int main()
                     printf("%02x ", ((uint8_t*)shared_buffer)[i]);
                 }
                 printf("\n");
+
+                explain_id((id_data_t*)shared_buffer);
                 break;
 
             case CMD_READ_PAGE: // read_page
@@ -455,7 +555,7 @@ int main()
                 queue_add_blocking(&cmd_queue, &cmd_arg);
                 queue_remove_blocking(&results_queue, &res);
 
-                if (res.sz <= 0 || res.sz > 4352) {
+                if (res.sz <= 0 || res.sz > pg_sz_glob.page_size_bytes + pg_sz_glob.oob_size_bytes) {
                     printf("Error reading page: %d\n", res.sz);
                     break;
                 }
@@ -502,6 +602,9 @@ int main()
                 printf("Drive strength is %u\n", str);
             } break;
 
+            case CMD_GET_PAGE_SIZE:
+                printf("%d,%d\n", pg_sz_glob.page_size_bytes, pg_sz_glob.oob_size_bytes);
+                break;
             default:
                 printf("%s", HELP_STR);
             }
