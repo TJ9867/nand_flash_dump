@@ -35,7 +35,7 @@ usage: dump_flash.py [-h] [-s START_PAGE] [-n NUM_PAGES] [-p PAGE_SIZE] [-x OOB_
 ```
 
 ## TODO: `pio` version
-There's a PIO version I'm attempting to build, however that's going to be used once a working version of the repo.
+There's a PIO version I'm attempting to build, however that's going to be developed once there's a working version of the repo.
 
 ## Connect to Dumper Manually
 1. Plugin the Pico / Flash the Firmware (hold button while plugging in, copy the `.uf2` produced by build onto the PICO drive that appears)
