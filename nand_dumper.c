@@ -114,9 +114,10 @@ int printf(const char*, ...);
 char HELP_STR[] = "Commands: \n\
 0: id - shows the ID/parameters of the connected NAND chip\n\
 1: read - reads the contents of one page of the NAND chip and increments internal counter\n\
-2: undefined - nothing\n\
-3: reset page - reset the page number to read\n\
-4: help - Display this help string\n";
+2: reset page - reset the page number to read\n\
+3: set page - set the page number to specific offset\n\
+4: get drive strength - get drive strength of pins\n\
+else: help - Display this help string\n";
 
 const uint32_t LED_PIN = 25;
 
