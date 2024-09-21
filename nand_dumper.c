@@ -93,7 +93,7 @@ typedef enum cmd_enum {
     CMD_RESET_PAGE_NO = 2,
     CMD_SET_PAGE_NO = 3,
     CMD_GET_DRIVE_STRENGTH = 4,
-    CMD_GET_PAGE_SIZE = 5,
+    CMD_GET_FLASH_INFO = 5,
     CMD_NONE
 } cmd_enum_t;
 
@@ -363,9 +363,10 @@ void explain_id(id_data_t* id_bytes)
 typedef struct _pg_sz_struct {
     uint16_t page_size_bytes;
     uint16_t oob_size_bytes;
-} page_sz_struct;
+    uint64_t flash_size_bytes;
+} flash_info_struct;
 
-bool get_page_size(id_data_t* id_bytes, page_sz_struct* pg_sz)
+bool get_flash_info(id_data_t* id_bytes, flash_info_struct* flash_info)
 {
 
     uint32_t pg_size_kb = (1 << (id_bytes->pgsz_bksz_iow & 0x03));
@@ -373,17 +374,21 @@ bool get_page_size(id_data_t* id_bytes, page_sz_struct* pg_sz)
     if (id_bytes->maker == TOSHIBA_KIOXIA) {
         switch (pg_size_kb) {
         case 4:
-            pg_sz->page_size_bytes = 4096;
-            pg_sz->oob_size_bytes = 256;
+            flash_info->page_size_bytes = 4096;
+            flash_info->oob_size_bytes = 256;
             break;
         case 2:
-            pg_sz->page_size_bytes = 2048;
-            pg_sz->oob_size_bytes = 128; // TODO: is this just the formula page_size / 16?
+            flash_info->page_size_bytes = 2048;
+            flash_info->oob_size_bytes = 128; // TODO: is this just the formula page_size / 16?
             break;
         default:
             // printf("bad pg_size_kb = %d\n", pg_size_kb);
             return false;
         }
+
+        // So far, this is tracks, but it may not apply to all Toshiba chips
+        uint32_t total_pg_size = (uint32_t)flash_info->page_size_bytes + (uint32_t)flash_info->oob_size_bytes;
+        flash_info->flash_size_bytes = 64 * 2048 * total_pg_size;
 
         return true;
     }
@@ -429,7 +434,7 @@ queue_t cmd_queue = { 0 };
 queue_t results_queue = { 0 };
 nand_pins_t pins_glob = { 0 };
 uint8_t shared_buffer[16384] = { 0 };
-page_sz_struct pg_sz_glob = { 0 };
+flash_info_struct flash_info_glob = { 0 };
 
 void core1_main()
 {
@@ -449,7 +454,7 @@ void core1_main()
             break;
 
         case CMD_READ_PAGE:
-            result.sz = pg_sz_glob.page_size_bytes + pg_sz_glob.oob_size_bytes; // TODO adjust this for other page sizes
+            result.sz = flash_info_glob.page_size_bytes + flash_info_glob.oob_size_bytes; // TODO adjust this for other page sizes
             memset(shared_buffer, 0, sizeof(shared_buffer));
             read_page(&pins_glob, page_num, shared_buffer, result.sz);
             page_num += 1;
@@ -495,18 +500,19 @@ int main()
     read_id(&pins_glob, &id_data);
 
     if (!check_supported_io_width(&id_data)) {
-        printf("Unable to get page size from NAND flash ID bytes!\n");
+        printf("Unsupported I/O width!\n");
         while (true) {
             tight_loop_contents();
         }
     }
 
-    if (!get_page_size(&id_data, &pg_sz_glob)) {
-        printf("Unable to get page size from NAND flash ID bytes!\n");
+    if (!get_flash_info(&id_data, &flash_info_glob)) {
+        printf("Unrecognized NAND flash ID bytes!\n");
         while (true) {
             tight_loop_contents();
         }
     }
+
     sleep_ms(500);
 
     multicore_launch_core1(core1_main);
@@ -515,8 +521,6 @@ int main()
 
     bool val = true;
     uint32_t curr_page = 0;
-
-    ;
 
     while (1) {
         val = (time_us_32() >> 17) & 0x1; // blink about every .262 secs
@@ -555,7 +559,7 @@ int main()
                 queue_add_blocking(&cmd_queue, &cmd_arg);
                 queue_remove_blocking(&results_queue, &res);
 
-                if (res.sz <= 0 || res.sz > pg_sz_glob.page_size_bytes + pg_sz_glob.oob_size_bytes) {
+                if (res.sz <= 0 || res.sz > flash_info_glob.page_size_bytes + flash_info_glob.oob_size_bytes) {
                     printf("Error reading page: %d\n", res.sz);
                     break;
                 }
@@ -602,8 +606,10 @@ int main()
                 printf("Drive strength is %u\n", str);
             } break;
 
-            case CMD_GET_PAGE_SIZE:
-                printf("%d,%d\n", pg_sz_glob.page_size_bytes, pg_sz_glob.oob_size_bytes);
+            case CMD_GET_FLASH_INFO:
+                printf("%d,%d,%lld\n", flash_info_glob.page_size_bytes,
+                    flash_info_glob.oob_size_bytes,
+                    flash_info_glob.flash_size_bytes);
                 break;
             default:
                 printf("%s", HELP_STR);
