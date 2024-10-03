@@ -1,6 +1,6 @@
 # Pico NAND Flash Dumper
 
-This repo is my current best attempt at a Raspberry Pi Pico NAND Flash. It doesn't follow any formal specs perfectly (e.g. ONFI), which is probably why it doesn't quite work.
+This repo is my current best attempt at a Raspberry Pi Pico NAND Flash. It only follows the specs for the TC58NVG2S0HBAI6 and TC58NVG1S3HBAI6 chips, not something like ONFI (but it could likely be adapted for that).
 ## State of this Repo
 Currently, this repo is not completely functional. There is a problem that occurs while dumping that I have yet to fix, which results in partially corrupted page reads.
 
