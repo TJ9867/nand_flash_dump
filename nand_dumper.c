@@ -403,15 +403,6 @@ bool check_supported_io_width(id_data_t* id_bytes)
     return io_width == 8; // currently this dumper only supports x8 chips
 }
 
-bool read_onfi_id(nand_pins_t* pins)
-{
-    char onfi_bytes[] = { 'O', 'N', 'F', 'I' };
-    char onfi_resp[6] = { 0 };
-    write_cmd(pins, 0x90);
-    write_addr_1(pins, 0x20);
-    read_bytes(pins, (unsigned char*)onfi_resp, sizeof(onfi_bytes));
-}
-
 void read_page(nand_pins_t* pins, uint32_t page_num, uint8_t* page_buff, uint32_t page_size)
 {
     reset_nand(pins);
